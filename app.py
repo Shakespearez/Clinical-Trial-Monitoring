@@ -16,7 +16,7 @@ def load_sponsor_lookup():
     df = pd.read_csv(SPONSOR_CSV)
     lookup = {}
     for _, row in df.iterrows():
-        friendly = str(row['friendly_name']).strip()
+        friendly = str(row['friendly_name']).strip().lower()
         sponsor = str(row['sponsor_name']).strip()
         if friendly not in lookup:
             lookup[friendly] = []
@@ -25,7 +25,7 @@ def load_sponsor_lookup():
 
 def get_sponsor_names(friendly_name):
     lookup = load_sponsor_lookup()
-    return lookup.get(friendly_name, [])
+    return lookup.get(friendly_name.strip().lower(), [])
 
 def fetch_trials_for_sponsor(sponsor_name):
     url = (
