@@ -87,7 +87,10 @@ def save_trial_history(df):
 def load_trial_history():
     if not os.path.exists(TRIALS_HISTORY_FILE):
         return pd.DataFrame()
-    return pd.read_csv(TRIALS_HISTORY_FILE)
+    try:
+        return pd.read_csv(TRIALS_HISTORY_FILE)
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
 
 def compare_trials(df_new, df_old):
     if df_old.empty or 'NCTId' not in df_old.columns:
