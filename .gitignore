@@ -1,0 +1,4 @@
+*.pyc
+__pycache__/
+watchlist.txt
+trial_history.csv
