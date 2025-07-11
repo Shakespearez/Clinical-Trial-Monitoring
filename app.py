@@ -34,7 +34,7 @@ def get_patent_expiry_from_pdf(pdf_url):
         return None
 
 st.set_page_config(page_title="Demo: IP Catalyst Dashboard", layout="wide")
-st.title("Demo: Drug Patent Expiry Scraper")
+st.title("Drug Patent Expiry Scraper")
 
 st.write("This is a demo of extracting key IP catalyst dates from company documents.")
 
@@ -52,9 +52,6 @@ if st.button("Find IP Expiry Date"):
         else:
             st.error("No expiry date found in the document.")
     else:
-        st.warning("Demo only supports 'IMP321' at the moment.")
+        st.warning("")
 
-st.markdown("""
----
-*Demo only: In production, you could allow any PDF link or drug/company name, and expand the logic to match multiple documents, extract other legal/IP catalysts, and automate updates for your fund's pipeline.*
-""")
+st.markdown()
