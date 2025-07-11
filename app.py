@@ -1,59 +1,98 @@
 import streamlit as st
+import requests
+import io
+import PyPDF2
+import re
 import pandas as pd
 import plotly.graph_objects as go
 import datetime
 
-# Define key events (for demo: IMP321 expiry only, but you can add more)
-# Format: {'date': datetime.date, 'label': 'Display Text'}
-key_events = [
-    {'date': datetime.date(2036, 1, 8), 'label': 'IMP321: Patent Expiry\n8 January 2036'},
-    # Add more like:
-    # {'date': datetime.date(2027, 6, 1), 'label': 'DrugX: FDA Decision\n1 June 2027'},
-]
+def get_patent_expiry_from_pdf(pdf_url):
+    try:
+        response = requests.get(pdf_url)
+        response.raise_for_status()
+        pdf_file = io.BytesIO(response.content)
+        reader = PyPDF2.PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+        pattern = r"(?:patent(?:\s+\w+)*\s+expiry\s+date(?:\s+\w+)*\s*(?:is|:|,)?\s*)?(\d{1,2}(?:st|nd|rd|th)?(?:\s+of)?\s+\w+\s*,?\s*\d{4})"
+        matches = re.findall(pattern, text, flags=re.IGNORECASE)
+        for m in matches:
+            try:
+                date = pd.to_datetime(m, errors='coerce', dayfirst=True)
+                if date and date.year == 2036:  # Focus on the known date for IMP321
+                    return date
+            except:
+                pass
+        return None
+    except Exception as e:
+        st.warning(f"Could not extract expiry date from PDF: {e}")
+        return None
 
-# UI: pick a year
-years = list(set([d['date'].year for d in key_events] + list(range(2023, 2041))))
-years = sorted(years)
-year = st.selectbox("Select year", years, index=years.index(2036) if 2036 in years else 0)
+st.set_page_config(page_title="Drug Patent Expiry Calendar", layout="wide")
+st.title("Drug Patent Expiry Calendar")
 
-# Build day grid for the selected year
+drug = st.text_input("Enter drug name (e.g., 'IMP321')")
+
+expiry_event = None
+expiry_date = None
+
+if st.button("Find IP Expiry Date"):
+    if drug.strip().upper() == "IMP321":
+        pdf_url = "https://www.immutep.com/files/content/investor/press-release/2022/IMM%20-%20Australian%20Patent%20Granted%20for%20Efti%20with%20PD-1%20Inhibitors%20-%2011Feb2022.pdf"
+        with st.spinner("Scraping patent expiry date..."):
+            expiry_date = get_patent_expiry_from_pdf(pdf_url)
+        if expiry_date:
+            expiry_event = {
+                'date': expiry_date,
+                'label': f'IMP321: Patent Expiry<br>{expiry_date.strftime("%d %B %Y")}'
+            }
+            st.success(f"Key Patent Expiry Date for IMP321: {expiry_date.strftime('%d %B %Y')}")
+        else:
+            st.error("No expiry date found in the document.")
+    else:
+        st.warning("Currently, this tool supports 'IMP321'.")
+
+# --- Calendar heatmap logic ---
+selected_year = expiry_event['date'].year if expiry_event else datetime.date.today().year
+years = list(range(selected_year-5, selected_year+6))
+year = st.selectbox("Select year", years, index=years.index(selected_year))
+
 start_date = datetime.date(year, 1, 1)
 end_date = datetime.date(year, 12, 31)
 date_range = pd.date_range(start=start_date, end=end_date)
 
-# For each day, default color is grey; special days get highlight and tooltip
 z = []
 hover = []
 for date in date_range:
     found = False
-    for event in key_events:
-        if date.date() == event['date']:
-            z.append(2)  # Highlight
-            hover.append(event['label'])
-            found = True
-            break
+    if expiry_event and date.date() == expiry_event['date'].date():
+        z.append(2)  # Highlight
+        hover.append(expiry_event['label'])
+        found = True
     if not found:
-        z.append(1)
-        hover.append(date.strftime('%d %b %Y'))
+        z.append(0)  # Blank/grey
+        hover.append("")  # No tooltip
 
-# Calendar as grid (7 rows for days of week, columns for weeks)
 weeks = (date_range.dayofyear - 1) // 7
 dow = date_range.weekday
 grid = pd.DataFrame({'week': weeks, 'dow': dow, 'z': z, 'hover': hover})
 
-# Build Plotly figure
 fig = go.Figure()
 for idx, row in grid.iterrows():
+    color = 'gold' if row['z'] == 2 else 'rgba(200,200,200,0.06)'
+    border = dict(color='black', width=1.5) if row['z'] == 2 else dict(color='rgba(60,60,60,0.1)', width=1)
     fig.add_trace(go.Scatter(
         x=[row['week']],
         y=[row['dow']],
         mode='markers',
         marker=dict(
             size=18,
-            color='gold' if row['z'] == 2 else 'rgba(200,200,200,0.9)',
-            line=dict(color='black', width=1) if row['z'] == 2 else dict(color='rgba(60,60,60,0.6)', width=1),
+            color=color,
+            line=border,
         ),
-        hovertemplate=row['hover'],
+        hovertemplate=row['hover'] if row['z'] == 2 else None,
         showlegend=False
     ))
 
@@ -83,7 +122,11 @@ fig.add_annotation(
     yshift=12
 )
 
-st.title("Key Catalyst Calendar")
+st.header("Key Date Calendar")
 st.plotly_chart(fig, use_container_width=True)
 
-st.caption("Click through years and hover highlighted days for catalyst details. Add more events to key_events as needed.")
+st.caption(
+    "Search for a drug to display its catalyst date on the calendar. "
+    "Hover highlighted days for catalyst details. "
+    "Calendar remains blank until a key date is found."
+)
